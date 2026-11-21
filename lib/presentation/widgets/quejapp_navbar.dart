@@ -5,6 +5,8 @@ import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
 import '../screens/pqr_form_screen.dart';
 import '../screens/mis_radicados_screen.dart';
+import '../screens/admin_dashboard_screen.dart';
+import '../screens/admin_radicados_screen.dart';
 
 class QuejappNavbar extends StatefulWidget {
   final String rutaActual;
@@ -200,13 +202,20 @@ class _QuejappNavbarState extends State<QuejappNavbar> {
     }
 
     return [
-      _buildMenuItem('Dashboard', () {
-        setState(() => _menuAbierto = false);
-      }),
-      const SizedBox(height: 6),
-      _buildMenuItem('Radicados', () {
-        setState(() => _menuAbierto = false);
-      }),
+    _buildMenuItem('Dashboard', () {
+   setState(() => _menuAbierto = false);
+    if (widget.rutaActual != 'Dashboard') {
+    Navigator.pushReplacement(context,
+      MaterialPageRoute(builder: (_) => const AdminDashboardScreen()));
+  }
+}),
+    _buildMenuItem('Radicados', () {
+      setState(() => _menuAbierto = false);
+      if (widget.rutaActual != 'Radicados') {
+        Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (_) => const AdminRadicadosScreen()));
+      }
+    }),
       const SizedBox(height: 12),
       _buildLogoutButton(),
     ];

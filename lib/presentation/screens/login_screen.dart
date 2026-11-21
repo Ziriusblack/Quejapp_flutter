@@ -3,6 +3,8 @@ import '../../data/network/api_service.dart';
 import 'home_screen.dart';
 import 'mis_radicados_screen.dart';
 import 'register_screen.dart';
+import 'admin_dashboard_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -44,7 +46,11 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const MisRadicadosScreen()),
+        MaterialPageRoute(
+          builder: (_) => rol == 'ADMIN'
+              ? const AdminDashboardScreen()
+              : const MisRadicadosScreen(),
+        ),
         (route) => false,
       );
     } else {
@@ -53,6 +59,27 @@ class _LoginScreenState extends State<LoginScreen> {
         const SnackBar(
           content: Text('Credenciales incorrectas o error de conexión'),
           backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+    }
+  }
+
+  Future<void> _abrirRecuperarContrasena() async {
+    final bool? cambiada = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ForgotPasswordScreen(
+          emailInicial: _emailController.text.trim(),
+        ),
+      ),
+    );
+
+    if (cambiada == true && mounted) {
+      _passwordController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Contraseña actualizada. Inicia sesión con tu nueva clave.'),
+          backgroundColor: Color(0xFF16A34A),
         ),
       );
     }
@@ -221,13 +248,35 @@ class _LoginScreenState extends State<LoginScreen> {
                           if (value == null || value.isEmpty) {
                             return 'La contraseña es obligatoria';
                           }
-                          if (value.length < 6) {
-                            return 'La contraseña debe tener al menos 6 caracteres';
+                          if (value.length < 8) {
+                            return 'La contraseña debe tener al menos 8 caracteres';
                           }
                           return null;
                         },
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 8),
+
+                      // ENLACE RECUPERAR CONTRASEÑA
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: _isLoading ? null : _abrirRecuperarContrasena,
+                          child: const Text(
+                            '¿Olvidaste tu contraseña?',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFF37003),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
 
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
