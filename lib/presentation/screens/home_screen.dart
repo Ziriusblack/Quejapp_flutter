@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
+import 'mis_radicados_screen.dart';
+import 'admin_dashboard_screen.dart';
 import '../widgets/quejapp_navbar.dart';
 import '../../data/network/api_service.dart';
 
@@ -19,30 +21,65 @@ class _HomeScreenState extends State<HomeScreen> {
   String _resueltas = '0';
   String _diasPromedio = '0 días';
   String _satisfaccion = '0%';
+  String _rolActual = 'INVITADO';
 
   @override
   void initState() {
     super.initState();
+    _verificarSesion();
     _cargarEstadisticas();
   }
 
-Future<void> _cargarEstadisticas() async {
+  Future<void> _verificarSesion() async {
+    final rol = await ApiService.getRolActual();
+    if (mounted) {
+      setState(() => _rolActual = rol);
+    }
+  }
+
+  Future<void> _cargarEstadisticas() async {
     final stats = await ApiService.obtenerEstadisticasHome();
     if (stats != null && mounted) {
       setState(() {
         _recibidas = (stats['totalPqrs'] ?? 0).toString();
         _resueltas = (stats['closedPqrs'] ?? 0).toString();
-        
+
         final double promedio = (stats['averageDaysToResolve'] ?? 0).toDouble();
         _diasPromedio = '${promedio.toStringAsFixed(1)} días';
-        
+
         final double satisfaccion = (stats['satisfactionRate'] ?? 0).toDouble();
         _satisfaccion = '${satisfaccion.round()}%';
       });
     }
   }
+
+  Future<void> _accionBotonPrincipal() async {
+    final rol = await ApiService.getRolActual();
+    if (!mounted) return;
+
+    if (rol == 'ADMIN') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+      );
+    } else if (rol == 'USER') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const MisRadicadosScreen()),
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+      _verificarSesion();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bool sesionActiva = _rolActual != 'INVITADO';
+
     return QuejappNavbar(
       rutaActual: 'Inicio',
       child: SingleChildScrollView(
@@ -62,7 +99,7 @@ Future<void> _cargarEstadisticas() async {
                   Center(
                     child: ClipOval(
                       child: Transform.scale(
-                        scale: 1.12, // Elimina el margen blanco cuadrado
+                        scale: 1.12,
                         child: Image.asset(
                           'assets/images/logo.png',
                           width: 240,
@@ -118,7 +155,7 @@ Future<void> _cargarEstadisticas() async {
                   ),
                   const SizedBox(height: 24),
 
-                  // Botón "Comenzar Ahora"
+                  // Botón "Comenzar Ahora" / "Ir a mi panel"
                   SizedBox(
                     width: 210,
                     child: ElevatedButton(
@@ -129,15 +166,10 @@ Future<void> _cargarEstadisticas() async {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         elevation: 2,
                       ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LoginScreen()),
-                        );
-                      },
-                      child: const Text(
-                        'Comenzar Ahora',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      onPressed: _accionBotonPrincipal,
+                      child: Text(
+                        sesionActiva ? 'Ir a mi panel' : 'Comenzar Ahora',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
