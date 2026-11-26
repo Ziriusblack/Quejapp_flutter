@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import '../../data/network/api_service.dart';
 import '../widgets/quejapp_navbar.dart';
 
-/// "Gestionar Radicado" del administrador.
 class AtenderPqrScreen extends StatefulWidget {
   final String id;
-  final String rutaActual; // para resaltar el menú: 'Radicados' o 'Dashboard'
+  final String rutaActual;
   const AtenderPqrScreen({super.key, required this.id, this.rutaActual = 'Radicados'});
 
   @override
@@ -16,7 +15,6 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
   static const _naranja = Color(0xFFF37003);
   static const _naranjaTitulo = Color(0xFFFF6A00);
 
-  // Opciones idénticas a las de tu web
   static const _estados = {0: 'Pendiente', 1: 'En progreso', 2: 'Resuelta', 3: 'Cerrada'};
   static const _departamentos = [
     'Gerencia',
@@ -29,10 +27,14 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
     'Atención al ciudadano',
   ];
   static const _tipos = {0: 'Petición', 1: 'Queja', 2: 'Reclamo', 3: 'Sugerencia', 4: 'Felicitación'};
-
-  // TODO: completa con la lista de categorías de tu Angular (código → nombre).
-  // Mientras tanto, si el código no está aquí se muestra "Categoría N".
-  static const Map<int, String> _categorias = {};
+  static const Map<int, String> _categorias = {
+    0: 'Servicio de Buses',
+    1: 'Estaciones y Portales',
+    2: 'Tarjetas y Recargas',
+    3: 'Atención al Usuario',
+    4: 'Seguridad',
+    5: 'Otro',
+  };
 
   final _resp = TextEditingController();
   Map<String, dynamic>? _pqr;
@@ -52,13 +54,23 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
     super.dispose();
   }
 
+  int _parseStatus(dynamic raw) {
+    final s = (raw ?? '0').toString().toUpperCase();
+    final n = int.tryParse(s);
+    if (n != null) return n.clamp(0, 3);
+    if (s == 'IN_PROGRESS') return 1;
+    if (s == 'RESOLVED') return 2;
+    if (s == 'CLOSED') return 3;
+    return 0;
+  }
+
   Future<void> _cargar() async {
     final d = await ApiService.obtenerDetalleAdmin(widget.id);
     if (!mounted) return;
     setState(() {
       _pqr = d;
       if (d != null) {
-        _status = (int.tryParse('${d['status']}') ?? 0).clamp(0, 3);
+        _status = _parseStatus(d['status']);
         final dep = (d['department'] ?? '').toString();
         _dep = _departamentos.contains(dep) ? dep : '';
         _resp.text = (d['response'] ?? '').toString();
@@ -91,7 +103,6 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
     }
   }
 
-  // ---------- formato ----------
   String _fecha(dynamic raw) {
     if (raw == null) return '';
     try {
@@ -122,7 +133,70 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
     return _categorias[c] ?? 'Categoría $c';
   }
 
-  // ---------- widgets ----------
+  String _prediccionTexto(dynamic raw) {
+    switch ((raw ?? '').toString().trim()) {
+      case 'MuyRapido':
+        return 'Muy Rápido';
+      case 'Rapido':
+        return 'Rápido';
+      case 'Lento':
+        return 'Lento';
+      case 'MuyLento':
+        return 'Muy Lento';
+      default:
+        return 'Por Determinar';
+    }
+  }
+
+  Widget _datoPrioridad(Map<String, dynamic> p) {
+  final rawPrio = (p['predictedPriority'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    final rawConf = p['priorityConfidence'];
+    int? pct;
+    if (rawConf != null) {
+      final val = double.tryParse(rawConf.toString());
+      if (val != null) {
+        pct = ((val > 0 && val <= 1.0) ? val * 100.0 : val).round();
+      }
+    }
+
+    Color bg = const Color(0xFFFEF9C3);
+    Color fg = const Color(0xFFA16207);
+    String label = 'MEDIA';
+    if (rawPrio == 'ALTA' || rawPrio == 'HIGH' || rawPrio == '2') {
+      bg = const Color(0xFFFEE2E2);
+      fg = const Color(0xFFB91C1C);
+      label = 'ALTA';
+    } else if (rawPrio == 'BAJA' || rawPrio == 'LOW' || rawPrio == '0') {
+      bg = const Color(0xFFDCFCE7);
+      fg = const Color(0xFF15803D);
+      label = 'BAJA';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        children: [
+          const Text(
+            'Prioridad (IA): ',
+            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: Color(0xFF0F172A)),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+            decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(99)),
+            child: Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12.5)),
+          ),
+          if (pct != null) ...[
+            const SizedBox(width: 8),
+            Text('($pct%)', style: const TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontSize: 13)),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _dato(String etiqueta, String valor) => Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: RichText(
@@ -138,7 +212,7 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
 
   Widget _historial(Map<String, dynamic> p, String correoUsuario) {
     final lista = (p['traceability'] is List) ? List.from(p['traceability']) : [];
-    final items = lista.whereType<Map>().toList();
+    final items = lista.whereType().toList();
     Widget linea(String fecha, String accion, String autor) => Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -191,8 +265,6 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
         child: Text(t, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
       );
 
-  // Los desplegables usan el ancho del campo y el texto largo salta de línea:
-  // así las opciones nunca se salen de la pantalla ni se solapan.
   Widget _desplegable<T>({
     required T value,
     required List<MapEntry<T, String>> opciones,
@@ -201,7 +273,6 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
       DropdownButtonFormField<T>(
         value: value,
         isExpanded: true,
-        itemHeight: null,
         menuMaxHeight: 360,
         borderRadius: BorderRadius.circular(10),
         dropdownColor: Colors.white,
@@ -219,10 +290,7 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
           for (final o in opciones)
             DropdownMenuItem<T>(
               value: o.key,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(o.value, softWrap: true, style: const TextStyle(fontSize: 15, height: 1.25, color: Color(0xFF0F172A))),
-              ),
+              child: Text(o.value, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14.5, color: Color(0xFF0F172A))),
             ),
         ],
         onChanged: onChanged,
@@ -240,10 +308,12 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     const Text('No se pudo cargar el radicado'),
                     const SizedBox(height: 12),
-                    ElevatedButton(onPressed: () {
-                      setState(() => _cargando = true);
-                      _cargar();
-                    }, child: const Text('Reintentar')),
+                    ElevatedButton(
+                        onPressed: () {
+                          setState(() => _cargando = true);
+                          _cargar();
+                        },
+                        child: const Text('Reintentar')),
                   ]),
                 )
               : SingleChildScrollView(
@@ -258,10 +328,8 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       const Text('Gestionar Radicado',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: _naranjaTitulo)),
+                          style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: _naranjaTitulo)),
                       const SizedBox(height: 20),
-
-                      // ----- Detalles -----
                       Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
@@ -276,9 +344,11 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
                           _dato('ID:', (p['reference'] ?? p['id'] ?? '').toString()),
                           _dato('Usuario:', _nombre(p['userProfile'], p['user'])),
                           _dato('Correo:', _correo(p['userProfile'], p['user'])),
-                          _dato('Estado:', _estados[int.tryParse('${p['status']}') ?? 0] ?? 'Pendiente'),
+                          _dato('Estado:', _estados[_parseStatus(p['status'])] ?? 'Pendiente'),
                           _dato('Tipo:', _tipos[int.tryParse('${p['type']}') ?? -1] ?? ''),
                           _dato('Categoría:', _categoria(p['category'])),
+                          _datoPrioridad(p),
+                          _dato('Tiempo Estimado (IA):', _prediccionTexto(p['prediction'])),
                           _dato('Asunto:', (p['subject'] ?? '').toString()),
                           _dato('Descripción:', (p['description'] ?? '').toString()),
                           _dato('Fecha Creación:', _fecha(p['recievedDate'])),
@@ -287,8 +357,6 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
                         ]),
                       ),
                       const SizedBox(height: 20),
-
-                      // ----- Formulario -----
                       Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
@@ -327,7 +395,7 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: _naranja,
                                 side: const BorderSide(color: _naranja),
-                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                               onPressed: () => Navigator.pop(context),
@@ -338,7 +406,7 @@ class _AtenderPqrScreenState extends State<AtenderPqrScreen> {
                                 backgroundColor: _naranjaTitulo,
                                 foregroundColor: Colors.white,
                                 elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               ),
                               onPressed: _guardando ? null : _guardar,

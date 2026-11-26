@@ -17,6 +17,7 @@ class DetalleRadicadoScreen extends StatefulWidget {
 class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
   late Map<String, dynamic> _pqr;
   bool _isLoading = false;
+  Map<String, dynamic>? _prediccionIa;
 
   final Color naranjaPrincipal = const Color(0xFFF37003);
 
@@ -24,6 +25,7 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
   void initState() {
     super.initState();
     _pqr = Map<String, dynamic>.from(widget.pqrInicial);
+    _cargarPrediccionSiFalta();
     _refrescarDetalleEnTiempoReal();
   }
 
@@ -39,6 +41,25 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
           _pqr = Map<String, dynamic>.from(detalleActualizado);
         }
         _isLoading = false;
+      });
+      await _cargarPrediccionSiFalta();
+    }
+  }
+
+  Future<void> _cargarPrediccionSiFalta() async {
+    final probsExistentes = _pqr['probabilities'] ?? _pqr['probabilidades'];
+    if (probsExistentes is Map && probsExistentes.isNotEmpty) return;
+
+    final res = await ApiService.predecirTiempoPqr(
+      type: int.tryParse('${_pqr['type']}') ?? 0,
+      category: int.tryParse('${_pqr['category']}') ?? 0,
+      subject: (_pqr['subject'] ?? '').toString(),
+      description: (_pqr['description'] ?? '').toString(),
+    );
+
+    if (mounted && res is Map) {
+      setState(() {
+        _prediccionIa = Map<String, dynamic>.from(res);
       });
     }
   }
@@ -123,7 +144,6 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
     }
   }
 
-  // Mapeo exacto a Profile.java (name + lastname)
   String _extraerNombrePerfil(dynamic profile, dynamic fallback) {
     if (profile is Map) {
       final name = (profile['name'] ?? '').toString();
@@ -134,12 +154,208 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
     return (fallback ?? 'Usuario').toString();
   }
 
-  // Mapeo exacto a Profile.java (email)
   String _extraerCorreoPerfil(dynamic profile, dynamic fallback) {
     if (profile is Map && profile['email'] != null) {
       return profile['email'].toString();
     }
     return (fallback ?? '').toString();
+  }
+
+  Map<String, dynamic> _estiloClaseIa(String claseRaw) {
+    final c = claseRaw.replaceAll(' ', '').toLowerCase();
+    if (c.contains('muyrapido') || c.contains('muyrápido')) {
+      return {
+        'label': 'Muy rápido',
+        'bg': const Color(0xFFDCFCE7),
+        'fg': const Color(0xFF15803D),
+      };
+    } else if (c.contains('rapido') || c.contains('rápido')) {
+      return {
+        'label': 'Rápido',
+        'bg': const Color(0xFFDBEAFE),
+        'fg': const Color(0xFF1D4ED8),
+      };
+    } else if (c.contains('muylento')) {
+      return {
+        'label': 'Muy lento',
+        'bg': const Color(0xFFFEE2E2),
+        'fg': const Color(0xFFB91C1C),
+      };
+    } else if (c.contains('lento')) {
+      return {
+        'label': 'Lento',
+        'bg': const Color(0xFFFEF9C3),
+        'fg': const Color(0xFFA16207),
+      };
+    }
+    return {
+      'label': claseRaw.isEmpty ? 'Por determinar' : claseRaw,
+      'bg': const Color(0xFFF1F5F9),
+      'fg': const Color(0xFF334155),
+    };
+  }
+
+  double _leerProb(Map probs, List<String> claves) {
+    for (final k in claves) {
+      if (probs[k] != null) {
+        return double.tryParse(probs[k].toString()) ?? 0.0;
+      }
+    }
+    return 0.0;
+  }
+
+  Widget _buildCajaPrediccionIa() {
+    final source = _prediccionIa ?? _pqr;
+    final rawClase = (source['prediccion'] ??
+            source['prediction'] ??
+            _pqr['prediction'] ??
+            '')
+        .toString()
+        .trim();
+
+    final rawProbs = source['probabilidades'] ??
+        source['probabilities'] ??
+        _pqr['probabilidades'] ??
+        _pqr['probabilities'];
+
+    if (rawClase.isEmpty && rawProbs == null) {
+      return const SizedBox.shrink();
+    }
+
+    double pMuyRapido = 0.0;
+    double pRapido = 0.0;
+    double pLento = 0.0;
+    double pMuyLento = 0.0;
+    bool tieneProbs = false;
+
+    if (rawProbs is Map && rawProbs.isNotEmpty) {
+      tieneProbs = true;
+      pMuyRapido = _leerProb(rawProbs, ['MuyRapido', 'Muy rápido', 'Muy rapido', 'muy_rapido']);
+      pRapido = _leerProb(rawProbs, ['Rapido', 'Rápido', 'rapido']);
+      pLento = _leerProb(rawProbs, ['Lento', 'lento']);
+      pMuyLento = _leerProb(rawProbs, ['MuyLento', 'Muy lento', 'muy_lento']);
+
+      final suma = pMuyRapido + pRapido + pLento + pMuyLento;
+      if (suma > 0 && suma <= 1.5) {
+        pMuyRapido *= 100.0;
+        pRapido *= 100.0;
+        pLento *= 100.0;
+        pMuyLento *= 100.0;
+      }
+    }
+
+    final rawConf = source['confianza'] ??
+        source['confidence'] ??
+        _pqr['predictionConfidence'] ??
+        _pqr['confidence'];
+    double? confianza;
+    if (rawConf != null) {
+      final val = double.tryParse(rawConf.toString());
+      if (val != null) {
+        confianza = (val > 0 && val <= 1.0) ? val * 100.0 : val;
+      }
+    } else if (tieneProbs) {
+      confianza = [pMuyRapido, pRapido, pLento, pMuyLento]
+          .reduce((a, b) => a > b ? a : b);
+    }
+
+    final estilo = _estiloClaseIa(rawClase);
+    final textoPill = confianza != null
+        ? '${estilo['label']} (${confianza.toStringAsFixed(2)}% confianza)'
+        : '${estilo['label']}';
+
+    Widget itemProb(String titulo, double valor) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              titulo,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF475569),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${valor.toStringAsFixed(2)}%',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 6, bottom: 18),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFED7AA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Tiempo estimado de respuesta (IA):',
+            style: TextStyle(
+              fontSize: 14.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: estilo['bg'] as Color,
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Text(
+              textoPill,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: estilo['fg'] as Color,
+              ),
+            ),
+          ),
+          if (tieneProbs) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(child: itemProb('Muy rápido', pMuyRapido)),
+                const SizedBox(width: 10),
+                Expanded(child: itemProb('Rápido', pRapido)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: itemProb('Lento', pLento)),
+                const SizedBox(width: 10),
+                Expanded(child: itemProb('Muy lento', pMuyLento)),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -155,7 +371,6 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
     final fechaCreacion = _formatearFechaCorta(_pqr['recievedDate']);
     final ultimaActualizacion = _formatearFechaCorta(_pqr['updatedDate']);
 
-    // Datos de respuesta
     final respuesta = (_pqr['response'] ?? '').toString();
     final tieneRespuesta = respuesta.isNotEmpty ||
         _pqr['employeeProfile'] != null ||
@@ -168,7 +383,6 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
         (_pqr['department'] ?? 'Dirección de operaciones').toString();
     final fechaRespuesta = _formatearFechaCorta(_pqr['responseDate']);
 
-    // Lista exacta de Trace.java (date, status, performedBy)
     final List traceability =
         (_pqr['traceability'] is List) ? List.from(_pqr['traceability']) : [];
 
@@ -259,8 +473,10 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
                     _buildCampoDato('Fecha de Creación:', fechaCreacion),
                     _buildCampoDato('Última Actualización:', ultimaActualizacion),
 
+                    _buildCajaPrediccionIa(),
+
                     if (tieneRespuesta) ...[
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 6),
                       Text(
                         'Detalles de Respuesta',
                         style: TextStyle(
@@ -300,7 +516,6 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
                     else
                       ...traceability.map((item) {
                         final mapItem = item is Map ? item : {};
-                        // Atributos exactos de Trace.java: date, status, performedBy
                         final fechaItem = _formatearFechaCorta(mapItem['date']);
                         final accionItem =
                             (mapItem['status'] ?? 'Actualización').toString();
@@ -354,7 +569,7 @@ class _DetalleRadicadoScreenState extends State<DetalleRadicadoScreen> {
     );
   }
 
-Widget _buildTarjetaHistorial({
+  Widget _buildTarjetaHistorial({
     required String fecha,
     required String accion,
     required String autor,
@@ -373,12 +588,10 @@ Widget _buildTarjetaHistorial({
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Franja vertical naranja izquierda
               Container(
                 width: 4.5,
                 color: naranjaPrincipal,
               ),
-              // Contenido textual
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

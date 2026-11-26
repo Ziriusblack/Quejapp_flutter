@@ -185,6 +185,57 @@ class _MisRadicadosScreenState extends State<MisRadicadosScreen> {
     }
   }
 
+Map< String, dynamic > _obtenerEstiloPrioridad(Map< String, dynamic > pqr) {
+    final rawPrio = (pqr['predictedPriority'] ?? '')
+        .toString()
+        .trim()
+        .toUpperCase();
+
+    final rawConf = pqr['priorityConfidence'];
+    int? pct;
+    if (rawConf != null) {
+      final val = double.tryParse(rawConf.toString());
+      if (val != null) {
+        pct = ((val > 0 && val <= 1.0) ? val * 100.0 : val).round();
+      }
+    }
+
+    switch (rawPrio) {
+      case 'ALTA':
+        return {
+          'texto': 'ALTA',
+          'fondo': const Color(0xFFFEE2E2),
+          'color': const Color(0xFFB91C1C),
+          'borde': const Color(0xFFFECACA),
+          'pct': pct,
+        };
+      case 'MEDIA':
+        return {
+          'texto': 'MEDIA',
+          'fondo': const Color(0xFFFEF9C3),
+          'color': const Color(0xFFA16207),
+          'borde': const Color(0xFFFEF08A),
+          'pct': pct,
+        };
+      case 'BAJA':
+        return {
+          'texto': 'BAJA',
+          'fondo': const Color(0xFFDCFCE7),
+          'color': const Color(0xFF15803D),
+          'borde': const Color(0xFFBBF7D0),
+          'pct': pct,
+        };
+      default:
+        return {
+          'texto': 'Por Determinar',
+          'fondo': const Color(0xFFF1F5F9),
+          'color': const Color(0xFF475569),
+          'borde': const Color(0xFFCBD5E1),
+          'pct': null,
+        };
+    }
+  }
+
   String _formatearFecha(dynamic fechaRaw) {
     if (fechaRaw == null) return 'Sin fecha';
     try {
@@ -427,6 +478,7 @@ class _MisRadicadosScreenState extends State<MisRadicadosScreen> {
     final estiloEstado = _obtenerEstiloEstado(pqr['status']);
     final estiloTipo = _obtenerEstiloTipo(pqr['type']);
     final estiloPrediccion = _obtenerEstiloPrediccion(pqr['prediction']);
+    final estiloPrioridad = _obtenerEstiloPrioridad(pqr);
 
     return Container(
       decoration: BoxDecoration(
@@ -588,6 +640,54 @@ class _MisRadicadosScreenState extends State<MisRadicadosScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
+
+              const Text(
+                  'PRIORIDAD',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: estiloPrioridad['fondo'] as Color,
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(
+                          color: estiloPrioridad['borde'] as Color,
+                        ),
+                      ),
+                      child: Text(
+                        estiloPrioridad['texto'] as String,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: estiloPrioridad['color'] as Color,
+                        ),
+                      ),
+                    ),
+                    if (estiloPrioridad['pct'] != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '(${estiloPrioridad['pct']}%)',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 14),
+
 
                 const Text(
                   'FECHA DE CREACIÓN',

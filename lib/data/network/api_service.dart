@@ -7,6 +7,7 @@ import '../local/db_helper.dart';
 
 class ApiService {
   static const String baseUrl = 'https://quejapi-back.onrender.com/api';
+  static const String iaBaseUrl = 'https://quejapp-nn.onrender.com';
   static const _storage = FlutterSecureStorage();
 
   // 1. OBTENER ESTADÍSTICAS REALES PARA EL HOME (GET /api/stats/overview)
@@ -324,17 +325,32 @@ class ApiService {
     }
   }
 
-  // 11. OBTENER PQRS PRIORIZADAS POR IA (GET /api/stats/priorities)
-  static Future<List> obtenerPqrsPriorizadas() async {
+// 11. OBTENER PQRS PRIORIZADAS POR IA (GET /api/stats/priorities)
+  static Future<List> obtenerPqrsPriorizadas({
+    String? startDate,
+    String? endDate,
+  }) async {
     try {
       final token = await _storage.read(key: 'jwt_token');
+      final Map<String, String> queryParams = {};
+      if (startDate != null && startDate.isNotEmpty) {
+        queryParams['startDate'] = startDate;
+      }
+      if (endDate != null && endDate.isNotEmpty) {
+        queryParams['endDate'] = endDate;
+      }
+
+      final uri = Uri.parse('$baseUrl/stats/priorities').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+
       final response = await http.get(
-        Uri.parse('$baseUrl/stats/priorities'),
+        uri,
         headers: {
           'Content-Type': 'application/json',
           if (token != null) 'Authorization': 'Bearer $token',
         },
-      ).timeout(const Duration(seconds: 25));
+      ).timeout(const Duration(seconds: 35));
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(utf8.decode(response.bodyBytes));
@@ -475,6 +491,33 @@ class ApiService {
     }
   }
 
+// 12. CONSULTAR PREDICCIÓN DE TIEMPO A LA RED NEURONAL EN RENDER (POST /predecir)
+  static Future<dynamic> predecirTiempoPqr({
+    required int type,
+    required int category,
+    required String subject,
+    required String description,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$iaBaseUrl/predecir'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'type': type,
+          'category': category,
+          'subject': subject,
+          'description': description,
+        }),
+      ).timeout(const Duration(seconds: 35));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(utf8.decode(response.bodyBytes));
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   static Future<void> _respaldoOffline(PqrModel pqr) async {
     final pqrOffline = PqrModel(
